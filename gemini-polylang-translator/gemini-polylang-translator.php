@@ -2,8 +2,8 @@
 /**
  * Plugin Name: Gemini Polylang Auto Translator
  * Plugin URI:  https://github.com/ektorcaba/gemini-polylang-translator
- * Description: Traduce entradas, CPTs, extractos, imagen destacada y taxonomías utilizando la API de Google Gemini integrada con Polylang.
- * Version:     1.2.3
+ * Description: Traduce entradas, CPTs, extractos, imagen destacada, metadatos y taxonomías utilizando la API de Google Gemini integrada con Polylang.
+ * Version:     1.2.4
  * Author:      ektorcaba
  * License:     GPL-2.0+
  * Text Domain: gemini-polylang-translator
@@ -117,7 +117,7 @@ if (!class_exists('Gemini_Polylang_Translator')) {
             );
             ?>
             <div style="padding: 5px 0;">
-                <p style="margin-top:0; font-size: 13px; color: #666;">Traduce el contenido, imagen destacada y taxonomías de esta entrada directamente con Gemini sin crear una entrada duplicada.</p>
+                <p style="margin-top:0; font-size: 13px; color: #666;">Traduce el contenido, imagen destacada, metadatos y taxonomías de esta entrada directamente con Gemini sin crear una entrada duplicada.</p>
                 <a href="<?php echo esc_url($url); ?>" class="button button-primary button-large" style="width:100%; text-align:center;">
                     Traducir AI
                 </a>
@@ -127,7 +127,7 @@ if (!class_exists('Gemini_Polylang_Translator')) {
 
         public function render_admin_notices() {
             if (isset($_GET['gpt_status']) && $_GET['gpt_status'] === 'success') {
-                echo '<div class="notice notice-success is-dismissible"><p><strong>Gemini Translator:</strong> Entrada, imagen destacada y taxonomías traducidas correctamente.</p></div>';
+                echo '<div class="notice notice-success is-dismissible"><p><strong>Gemini Translator:</strong> Entrada, imagen destacada, metadatos y taxonomías traducidas correctamente.</p></div>';
             }
         }
 
@@ -263,6 +263,9 @@ if (!class_exists('Gemini_Polylang_Translator')) {
             // Copiar la imagen destacada
             $this->copy_featured_image($source_post->ID, $post_id, $target_lang);
 
+            // Copiar metadatos (Ficha técnica)
+            $this->copy_post_meta($source_post->ID, $post_id);
+
             // Copiar y traducir taxonomías
             $this->copy_and_translate_taxonomies($source_post->ID, $post_id, $source_lang, $target_lang, $api_key, $model);
 
@@ -346,6 +349,9 @@ if (!class_exists('Gemini_Polylang_Translator')) {
             // Copiar la imagen destacada
             $this->copy_featured_image($post_id, $new_post_id, $target_lang);
 
+            // Copiar metadatos (Ficha técnica)
+            $this->copy_post_meta($post_id, $new_post_id);
+
             // Copiar y traducir taxonomías
             $this->copy_and_translate_taxonomies($post_id, $new_post_id, $source_lang, $target_lang, $api_key, $model);
 
@@ -374,7 +380,39 @@ if (!class_exists('Gemini_Polylang_Translator')) {
         }
 
         /* ------------------------------------------------------------------------
-         * 5. TAXONOMÍAS
+         * 5. METADATOS (FICHA TÉCNICA)
+         * ------------------------------------------------------------------------ */
+
+        private function copy_post_meta($source_post_id, $target_post_id) {
+            $meta_keys = get_post_custom_keys($source_post_id);
+
+            if (empty($meta_keys)) return;
+
+            $ignored_keys = array(
+                '_edit_lock',
+                '_edit_last',
+                '_wp_old_slug',
+                '_thumbnail_id',
+            );
+
+            foreach ($meta_keys as $key) {
+                if (in_array($key, $ignored_keys, true)) continue;
+
+                $meta_values = get_post_custom_values($key, $source_post_id);
+
+                if (!empty($meta_values)) {
+                    delete_post_meta($target_post_id, $key);
+
+                    foreach ($meta_values as $value) {
+                        $value = maybe_unserialize($value);
+                        add_post_meta($target_post_id, $key, $value);
+                    }
+                }
+            }
+        }
+
+        /* ------------------------------------------------------------------------
+         * 6. TAXONOMÍAS
          * ------------------------------------------------------------------------ */
 
         private function copy_and_translate_taxonomies($source_post_id, $target_post_id, $source_lang, $target_lang, $api_key, $model) {
@@ -454,16 +492,16 @@ if (!class_exists('Gemini_Polylang_Translator')) {
         }
 
         /* ------------------------------------------------------------------------
-         * 6. LLAMADA API A GEMINI
+         * 7. LLAMADA API A GEMINI
          * ------------------------------------------------------------------------ */
 
         private function translate_with_gemini($text, $from_lang, $to_lang, $api_key, $model = 'gemini-3.5-flash-lite', $is_html = false) {
             if (empty(trim($text))) return '';
 
-                $endpoint = sprintf(
-                    'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent',
-                    sanitize_text_field($model)
-                );
+            $endpoint = sprintf(
+                'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent',
+                sanitize_text_field($model)
+            );
 
             $prompt = "Translate the following text from language code '{$from_lang}' to language code '{$to_lang}'.\n";
             if ($is_html) {
